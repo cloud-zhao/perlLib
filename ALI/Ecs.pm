@@ -10,7 +10,7 @@ use Mojo::UserAgent;
 use JSON;
 
 use base qw(Exporter);
-our @EXPORT=qw(new entrance get_allinstance instanced);
+our @EXPORT=qw();
 
 
 sub new{
@@ -82,7 +82,7 @@ sub entrance{
 
 sub get_allinstance{
 	my $self=shift;
-	my $region=shift;
+	my $region=shift || die "Region can not be empty.\n";
 	my $para={Action	=>"DescribeInstances",
 		  RegionId	=>$region,
 		  Status	=>"Running",
@@ -119,8 +119,8 @@ sub instanced{
 	my $ac={stop	=>"StopInstance",
 		start	=>"StartInstance",
 		reboot	=>"RebootInstance"};
-	my $para={Action	=>$ac->{$action},
-		  InstanceId	=>$insid};
+	my $para={Action	=>$ac->{$action} || die "Parameter error.\n",
+		  InstanceId	=>$insid || die "Parameter error.\n"};
 	my $cb=sub {
 		$para->{ForceStop}="true";
 		$self->entrance(%$para);
@@ -130,6 +130,15 @@ sub instanced{
 		 reboot	=>$cb};
 
 	return &$fun->{$action};
+}
+
+sub modify_instance{
+	my $self=shift;
+	my ($insid,%para)=@_;
+	die "Parameter error.\n" if @_%2 == 0;
+	$para{Action}="ModifyInstanceAttribute";
+	$para{InstanceId}=$insid || die "InstanceId can not be empty.\n";
+	$self->entrance(%para);
 }
 
 1;
