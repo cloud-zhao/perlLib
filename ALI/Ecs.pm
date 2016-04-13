@@ -72,9 +72,7 @@ sub entrance{
 	my $tx=$ua->get($req_str);
 	my $res;
 	unless($res=$tx->success){
-		my $err=$tx->error;
-		$err->{code} ? print "Failed: $err->{code}\tresponse: $err->{message}\n" :
-		print "Connection error: $err->{message}\n";
+		print $tx->res->body,"\n";
 		exit;
 	}
 	return $res->body;
