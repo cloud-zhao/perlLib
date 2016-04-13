@@ -118,7 +118,8 @@ sub instanced{
 	my ($insid,$action)=@_;
 	my $ac={stop	=>"StopInstance",
 		start	=>"StartInstance",
-		reboot	=>"RebootInstance"};
+		reboot	=>"RebootInstance",
+		del	=>"DeleteInstance"};
 	my $para={Action	=>$ac->{$action} || die "Parameter error.\n",
 		  InstanceId	=>$insid || die "Parameter error.\n"};
 	my $cb=sub {
@@ -127,7 +128,8 @@ sub instanced{
 	};
 	my $fun={stop	=>$cb,
 		 start	=>sub{$self->entrance(%$para)},
-		 reboot	=>$cb};
+		 reboot	=>$cb,
+	 	 del	=>sub{$self->entrance(%$para)}};
 
 	return &$fun->{$action};
 }
