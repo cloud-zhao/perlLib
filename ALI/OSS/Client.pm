@@ -9,6 +9,12 @@ use base qw(Exporter);
 our @EXPORT=qw();
 
 use constant {
+	#CLINET http field
+	H_HEAD		=>	"headers",
+	H_BODY		=>	"body",
+	H_MTH		=>	"method",
+	H_URL		=>	"url",
+	H_R_TIMEOUT	=>	"timeout",
 	#HTTP method
 	GET		=>	"GET",
 	PUT		=>	"PUT",
@@ -53,9 +59,24 @@ sub new{
 	$self->{KEY}=$key || die "KEY can not be empty.\n";
 	$self->{URL}=$url || "https://oss-cn-hangzhou.aliyuncs.com";
 	$self->{TIMEOUT}=$timeout || 300;
-	$self->{UA}=ALI::OSS::Http->new || die "Create http object failed.\n";
+	$self->{UA}=ALI::OSS::Http->new($self->{URL}) || die "Create http object failed.\n";
 
 	return bless $self,$class;
+}
+
+sub get_buckets{
+	my $self=shift;
+	my $header={
+		DATE()		=>	gtime(),
+		CO_TYPE()	=>	"",
+		AUTH()		=>	""};
+	my $object="/";
+	my $resource="$object";
+	$header->{+CO_TYPE}=get_mimetype;
+	$header->{+AUTH}=get_sign($self->{ID},$self->{KEY},GET,"",
+				$header->{+CO_TYPE},$header->{+DATE},"",$resource);
+	$self->{UA}->set_req(H_HEAD()=>$header,H_MTH()=>GET());
+	$self->{UA}->send_req->res_tostring;
 }
 
 sub put_object{
@@ -81,9 +102,9 @@ sub put_object{
 				$header->{+CO_TYPE},$header->{+DATE},"",$resource);
 	my $url=$self->{URL}.$resource;
 
-	print "$_\t$header->{$_}\n" for keys  %$header;
+	#print "$_\t$header->{$_}\n" for keys  %$header;
 
-	my $ua=$self->{UA}->set_req(headers=>$header,url=>$url,body=>$content,method=>PUT);
+	my $ua=$self->{UA}->set_req(H_HEAD()=>$header,H_BODY()=>$content,H_MTH()=>PUT());
 	$ua->send_req->res_tostring;
 
 }
