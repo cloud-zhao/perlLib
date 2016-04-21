@@ -7,6 +7,7 @@ use ALI::OSS::UserAgent;
 sub new{
 	my $class=shift;
 	my $self={};
+	$self->{req}{url}=shift || die "Url can not be empty.\n";
 	$self->{connect}{timeout}=30;
 	$self->{req}{timeout}=5184000;
 	@{$self->{method}}{qw(put del get head post opt patch)}=qw(PUT DELETE GET HEAD POST OPTIONS PATCH);
@@ -48,6 +49,11 @@ sub res_tostring{
 	print "HEADER:\t$_ : $res->{headers}{$_}\n" for keys %{$res->{headers}};
 }
 
+sub res_body{ shift->{res}{body} || "" }
+sub res_code{ shift->{res}{code} || 404 }
+sub res_headers{ shift->{res}{headers} || {} }
+sub res_message{ shift->{res}{message} || "FAIL" }
+
 my $get_url=sub{shift->{req}{url} || die "Url can not be empty.\n"};
 my $get_headers=sub{
 	my $header=shift->{req}{headers};
@@ -78,6 +84,13 @@ sub send_req{
 		$self->{res}{body}=$res->body;
 		$self->{res}{message}=$res->message;
 		$self->{res}{headers}=$res->headers->to_hash;
+	}
+	if($self->{res}{code} == 500){
+		print STDERR "CODE: $self->{res}{code}\n";
+		print STDERR "BODY: $self->{res}{body}\n";
+		print STDERR "\nTry Again\n";
+		sleep 10;
+		$self->send_req;
 	}
 	return $self;
 }

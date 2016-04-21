@@ -4,6 +4,7 @@ use warnings;
 use ALI::OSS::Http;
 use ALI::OSS::MimeType;
 use ALI::OSS::Util;
+use ALI::OSS::Result;
 
 use base qw(Exporter);
 our @EXPORT=qw();
@@ -60,6 +61,7 @@ sub new{
 	$self->{URL}=$url || "https://oss-cn-hangzhou.aliyuncs.com";
 	$self->{TIMEOUT}=$timeout || 300;
 	$self->{UA}=ALI::OSS::Http->new($self->{URL}) || die "Create http object failed.\n";
+	$self->{DOM}=ALI::OSS::Result->new;
 
 	return bless $self,$class;
 }
@@ -76,7 +78,7 @@ sub get_buckets{
 	$header->{+AUTH}=get_sign($self->{ID},$self->{KEY},GET,"",
 				$header->{+CO_TYPE},$header->{+DATE},"",$resource);
 	$self->{UA}->set_req(H_HEAD()=>$header,H_MTH()=>GET());
-	$self->{UA}->send_req->res_tostring;
+	$self->{DOM}->get_buckets($self->{UA}->send_req->res_body)->{to_string}();
 }
 
 sub put_object{

@@ -237,7 +237,7 @@ my $mime_types={
 };
 
 sub get_mimetype{
-	my @parts=split /\./,shift;
+	my @parts=split /\./,shift || "OSS";
 	return @parts > 1 ? $mime_types->{lc($parts[-1])} : $mime_types->{default};
 }
 
