@@ -68,6 +68,8 @@ sub new{
 	return bless $self,$class;
 }
 
+my $check_para=sub{shift || die "Can not be empty.\n"};
+
 sub get_buckets{
 	my $self=shift;
 	my $header={
@@ -86,8 +88,9 @@ sub get_buckets{
 
 sub put_bucket{
 	my $self=shift;
-	my $bucket=shift || die "Bucket can not be empty.\n";
+	my $bucket=$check_para->(shift);
 	my $acl=shift || OSS_ACL_TYPE_PR;
+	my $object="?acl";
 	my $header={
 		DATE()		=>	gtime(),
 		CO_TYPE()	=>	get_mimetype,
@@ -95,7 +98,7 @@ sub put_bucket{
 		OSS_ACL()	=>	$acl};
 
 	my $req={H_MTH()	=>	PUT,
-		 H_RES()	=>	get_resource(validate_bucket $bucket),
+		 H_RES()	=>	get_resource($bucket,$object),
 	 	 H_HEAD()	=>	$header,
 	 	 H_URL()	=>	$self->{URL}};
 	
@@ -105,7 +108,7 @@ sub put_bucket{
 
 sub get_objects{
 	my $self=shift;
-	my $bucket=shift || die "BucketName can not be empty.\n";
+	my $bucket=$check_para->(shift);
 	my $opt=shift;
 
 	my $header={
@@ -117,7 +120,7 @@ sub get_objects{
 	}
 
 	my $req={H_MTH()	=>	GET,
-		 H_RES()	=>	get_resource(validate_bucket $bucket),
+		 H_RES()	=>	get_resource($bucket),
 	 	 H_HEAD()	=>	$header,
 	 	 H_URL()	=>	$self->{URL}};
 
@@ -126,7 +129,9 @@ sub get_objects{
 
 sub upload_file{
 	my $self=shift;
-	my ($bucket,$object,$file)=@_;
+	my $bucket=$check_para->(shift);
+	my $object=$check_para->(shift);
+	my $file=$check_para->(shift);
 	my $header={CA_CONTROL()	=>	"no-cache",
 		    CO_MD5()		=>	"",
 	    	    CO_LENGTH()		=>	"",
@@ -138,8 +143,6 @@ sub upload_file{
 	    };
 
 	die "$file not found.\n" unless validate_filename($file) && -f $file;
-	$bucket=validate_bucket $bucket;
-	$object=validate_object	$object;
 	$header->{+CO_MD5}=get_file_md5 $file;
 	$header->{+CO_LENGTH}=(stat $file)[7];
 	$header->{+CO_TYPE}=get_mimetype $object;
@@ -156,7 +159,9 @@ sub upload_file{
 
 sub put_object{
 	my $self=shift;
-	my ($bucket,$object,$content)=@_;
+	my $bucket=$check_para->(shift);
+	my $object=$check_para->(shift);
+	my $content=$check_para->(shift);
 	my $header={CA_CONTROL()	=>	"no-cache",
 		    CO_MD5()		=>	"",
 	    	    CO_LENGTH()		=>	"",
@@ -166,9 +171,7 @@ sub put_object{
 	    	    CO_ENCODING()	=>	"utf-8",
 	    	    AUTH()		=>	""
 	    };
-	$bucket=validate_bucket $bucket;
-	$object=validate_object	$object;
-	$header->{+CO_MD5}=get_str_md5 $content || die "Content can not be empty.\n";
+	$header->{+CO_MD5}=get_str_md5 $content;
 	$header->{+CO_LENGTH}=length $content;
 	$header->{+CO_TYPE}=get_mimetype $object;
 
@@ -189,7 +192,7 @@ sub _get_sign{
 
 sub _send_req{
 	my $self=shift;
-	my $req=shift || die "Request can not be empty.\n";
+	my $req=$check_para->(shift);
 	my $ua=ALI::OSS::Http->new($self->{C_TIMEOUT},$self->{R_TIMEOUT});
 	my ($header,$method,$resource,$url)=($req->{+H_HEAD},$req->{+H_MTH},
 						$req->{+H_RES},$req->{+H_URL});

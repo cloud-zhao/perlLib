@@ -50,9 +50,14 @@ sub get_resource{
 	my $bucket=shift || "";
 	my $object=shift || "";
 	if($bucket && $object){
-		return $object ne '/' ? "/".$bucket."/".$object : "/".$bucket.$object;
+		$bucket=validate_bucket($bucket);
+		$object=validate_object($object);
+		return "/".$bucket."/".$object;
+	}elsif($bucket){
+		$bucket=validate_bucket($bucket);
+		return "/".$bucket."/";
 	}else{
-		return $bucket ? "/".$bucket."/" : "/";
+		return "/";
 	}
 }
 
@@ -84,7 +89,7 @@ sub validate_object{
 	if(index($object,'/')==0 || $object!~$format){
 		die "Object name format error.\n";
 	}else{
-		return "$object";
+		return $object;
 	}
 }
 
