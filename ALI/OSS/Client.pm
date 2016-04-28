@@ -13,8 +13,10 @@ use constant {
 	#CLINET http field
 	H_HEAD		=>	"headers",
 	H_BODY		=>	"body",
+	H_BTYPE		=>	"bodytype",
 	H_MTH		=>	"method",
 	H_URL		=>	"url",
+	H_RES		=>	"resource",
 	H_R_TIMEOUT	=>	"timeout",
 	#HTTP method
 	GET		=>	"GET",
@@ -54,13 +56,13 @@ use constant {
 
 sub new{
 	my $class=shift;
-	my ($id,$key,$url,$timeout)=@_;
+	my ($id,$key,$url,$ctimeout,$rtimeout)=@_;
 	my $self={};
 	$self->{ID}=$id || die "ID can not be empty.\n";
 	$self->{KEY}=$key || die "KEY can not be empty.\n";
 	$self->{URL}=$url || "https://oss-cn-hangzhou.aliyuncs.com";
-	$self->{TIMEOUT}=$timeout || 300;
-	$self->{UA}=ALI::OSS::Http->new($self->{URL}) || die "Create http object failed.\n";
+	$self->{C_TIMEOUT}=$ctimeout || "";
+	$self->{R_TIMEOUT}=$rtimeout || "";
 	$self->{DOM}=ALI::OSS::Result->new;
 
 	return bless $self,$class;
@@ -70,15 +72,86 @@ sub get_buckets{
 	my $self=shift;
 	my $header={
 		DATE()		=>	gtime(),
-		CO_TYPE()	=>	"",
+		CO_TYPE()	=>	get_mimetype,
 		AUTH()		=>	""};
-	my $object="/";
-	my $resource="$object";
-	$header->{+CO_TYPE}=get_mimetype;
-	$header->{+AUTH}=get_sign($self->{ID},$self->{KEY},GET,"",
-				$header->{+CO_TYPE},$header->{+DATE},"",$resource);
-	$self->{UA}->set_req(H_HEAD()=>$header,H_MTH()=>GET());
-	$self->{DOM}->get_buckets($self->{UA}->send_req->res_body)->{to_string}();
+
+	my $req={H_MTH()	=>	GET,
+		 H_RES()	=>	get_resource,
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL}};
+
+	my $res=$self->_send_req($req);
+	$res->get_buckets->{to_string}();
+}
+
+sub put_bucket{
+	my $self=shift;
+	my $bucket=shift || die "Bucket can not be empty.\n";
+	my $acl=shift || OSS_ACL_TYPE_PR;
+	my $header={
+		DATE()		=>	gtime(),
+		CO_TYPE()	=>	get_mimetype,
+		AUTH()		=>	"",
+		OSS_ACL()	=>	$acl};
+
+	my $req={H_MTH()	=>	PUT,
+		 H_RES()	=>	get_resource(validate_bucket $bucket),
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL}};
+	
+
+	$self->_send_req($req)->res_tostring;
+}
+
+sub get_objects{
+	my $self=shift;
+	my $bucket=shift || die "BucketName can not be empty.\n";
+	my $opt=shift;
+
+	my $header={
+		DATE()		=>	gtime,
+		CO_TYPE()	=>	get_mimetype,
+		AUTH()		=>	""};
+	if(ref $opt eq 'HASH'){
+		$header->{$_}=$opt->{$_} for keys %$opt;
+	}
+
+	my $req={H_MTH()	=>	GET,
+		 H_RES()	=>	get_resource(validate_bucket $bucket),
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL}};
+
+	$self->_send_req($req)->get_objects->{to_string}();
+}
+
+sub upload_file{
+	my $self=shift;
+	my ($bucket,$object,$file)=@_;
+	my $header={CA_CONTROL()	=>	"no-cache",
+		    CO_MD5()		=>	"",
+	    	    CO_LENGTH()		=>	"",
+	    	    DATE()		=>	gtime(),
+	    	    CO_TYPE()		=>	"",
+	    	    EXPIRES()		=>	gtime(time+10*60),
+	    	    CO_ENCODING()	=>	"utf-8",
+	    	    AUTH()		=>	""
+	    };
+
+	die "$file not found.\n" unless validate_filename($file) && -f $file;
+	$bucket=validate_bucket $bucket;
+	$object=validate_object	$object;
+	$header->{+CO_MD5}=get_file_md5 $file;
+	$header->{+CO_LENGTH}=(stat $file)[7];
+	$header->{+CO_TYPE}=get_mimetype $object;
+
+	my $req={H_MTH()	=>	PUT,
+		 H_RES()	=>	get_resource($bucket,$object),
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL},
+	 	 H_BODY()	=>	$file,
+	 	 H_BTYPE()	=>	"file"};
+
+	$self->_send_req($req)->res_tostring;
 }
 
 sub put_object{
@@ -95,20 +168,51 @@ sub put_object{
 	    };
 	$bucket=validate_bucket $bucket;
 	$object=validate_object	$object;
-	my $resource="/$bucket/$object";
-
-	$header->{+CO_MD5}=get_md5 $content;
-	$header->{+CO_LENGTH}=length $content || die "Content can not be empty.\n";
+	$header->{+CO_MD5}=get_str_md5 $content || die "Content can not be empty.\n";
+	$header->{+CO_LENGTH}=length $content;
 	$header->{+CO_TYPE}=get_mimetype $object;
-	$header->{+AUTH}=get_sign($self->{ID},$self->{KEY},PUT,$header->{+CO_MD5},
-				$header->{+CO_TYPE},$header->{+DATE},"",$resource);
-	my $url=$self->{URL}.$resource;
 
-	#print "$_\t$header->{$_}\n" for keys  %$header;
+	my $req={H_MTH()	=>	PUT,
+		 H_RES()	=>	get_resource($bucket,$object),
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL},
+	 	 H_BODY()	=>	$content,
+	 	 H_BTYPE()	=>	"object"};
 
-	my $ua=$self->{UA}->set_req(H_HEAD()=>$header,H_BODY()=>$content,H_MTH()=>PUT());
-	$ua->send_req->res_tostring;
+	$self->_send_req($req)->res_tostring;
+}
 
+sub _get_sign{
+	my $self=shift;
+	return get_sign($self->{ID},$self->{KEY},@_);
+}
+
+sub _send_req{
+	my $self=shift;
+	my $req=shift || die "Request can not be empty.\n";
+	my $ua=ALI::OSS::Http->new($self->{C_TIMEOUT},$self->{R_TIMEOUT});
+	my ($header,$method,$resource,$url)=($req->{+H_HEAD},$req->{+H_MTH},
+						$req->{+H_RES},$req->{+H_URL});
+	$header->{+DATE}=gtime;
+	if(exists $header->{+EXPIRES}){
+		$header->{+EXPIRES}=gtime(time+10*60);
+	}
+	$header->{+AUTH}=$self->_get_sign($method,$header,$resource);
+	$url=$url.$resource;
+	
+	exists $req->{+H_BTYPE} ?
+	$ua->set_req(H_HEAD()=>$header,H_BODY()=>$req->{+H_BODY},H_BTYPE()=>$req->{+H_BTYPE},H_MTH()=>$method,H_URL()=>$url) :
+	$ua->set_req(H_HEAD()=>$header,H_MTH()=>$method,H_URL()=>$url) ;
+	my $res=$self->{DOM}->res_parse($ua->send_req);
+	if($res->res_code==500){
+		print STDERR 
+		"CODE: $res->res_code\n
+		BODY: $res->res_body\n
+		MESSAGE: $res->res_message\n";
+		$self->_send_req($req);
+	}
+
+	return $res;
 }
 
 1;

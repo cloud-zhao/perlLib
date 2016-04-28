@@ -2,14 +2,14 @@ package ALI::OSS::Http;
 use strict;
 use warnings;
 use ALI::OSS::UserAgent;
+use ALI::OSS::Util;
 
 
 sub new{
 	my $class=shift;
 	my $self={};
-	$self->{req}{url}=shift || die "Url can not be empty.\n";
-	$self->{connect}{timeout}=30;
-	$self->{req}{timeout}=5184000;
+	$self->{connect}{timeout}=shift || 30;
+	$self->{req}{timeout}=shift || 5184000;
 	@{$self->{method}}{qw(put del get head post opt patch)}=qw(PUT DELETE GET HEAD POST OPTIONS PATCH);
 	return bless $self,$class;
 }
@@ -40,66 +40,48 @@ sub set_req{
 	return $self;
 }
 
-sub res_tostring{
-	my $self=shift;
-	my $res=$self->{res};
-	print "CODE: $res->{code}\n";
-	print "BODY: $res->{body}\n";
-	print "MESSAGE: $res->{message}\n";
-	print "HEADER:\t$_ : $res->{headers}{$_}\n" for keys %{$res->{headers}};
-}
-
-sub res_body{ shift->{res}{body} || "" }
-sub res_code{ shift->{res}{code} || 404 }
-sub res_headers{ shift->{res}{headers} || {} }
-sub res_message{ shift->{res}{message} || "FAIL" }
-
 my $get_url=sub{shift->{req}{url} || die "Url can not be empty.\n"};
-my $get_headers=sub{
-	my $header=shift->{req}{headers};
-	return ref $header eq 'HASH' ? $header : {};
+my $get_headers=sub{ref $_[0]->{req}{headers} eq 'HASH' ? $_[0]->{req}{headers} : {}};
+my $get_method=sub{
+	my $self=shift;
+	my $me=$self->{method}{lc($self->{req}{method})} || die "Unknown http method.\n";
+	return $me;
 };
+my $get_body=sub{exists $_[0]->{req}{body} ? $_[0]->{req}{body} : undef};
+my $get_bodytype=sub{exists $_[0]->{req}{bodytype} ? uc $_[0]->{req}{bodytype} eq 'FILE' ? 1 : 0 : 0};
+
 
 sub send_req{
 	my $self=shift;
-	my $t=ALI::OSS::UserAgent->new();
-	my $method=$self->get_method;
+	my $ua=ALI::OSS::UserAgent->new();
+	my $method=$self->$get_method;
 	my $url=$self->$get_url;
 	my $header=$self->$get_headers;
-	my $body=$self->{req}{body};
-	$t=$t->request_timeout($self->{req}{timeout})->connect_timeout($self->{connect}{timeout});
-	my $tx=$t->send_request($method,$url,$header,$body);
+	my $body=$self->$get_body;
+	#print "$method $url $body\n";
+	#print "$_\t$header->{$_}\n" for keys %$header;
+	$ua=$ua->request_timeout($self->{req}{timeout})->connect_timeout($self->{connect}{timeout});
+	my $tx=$ua->build_tx($method=>$url=>$header);
+	$self->$get_bodytype ? $tx->req->content->asset(Mojo::Asset::File->new(path=>$body)) :
+	$tx->req->body($body) if defined $body;
+	$tx=$ua->start($tx);
 	my $res;
 	unless($res=$tx->success){
 		my $err=$tx->error;
-		if($err->{code}){
-			$self->{res}{code}=$err->{code};
-			$self->{res}{body}=$tx->res->body;
-			$self->{res}{message}=$err->{message};
-			$self->{res}{headers}=$tx->res->headers->to_hash;
-		}
-		$self->{connect}{message}=$err->{message};
+		$self->{res}{code}=$err->{code};
+		$self->{res}{body}=$tx->res->body if $err->{code};
+		$self->{res}{message}=$err->{message};
+		$self->{res}{headers}=$tx->res->headers->to_hash if $err->{code};
 	}else{
 		$self->{res}{code}=$res->code;
 		$self->{res}{body}=$res->body;
 		$self->{res}{message}=$res->message;
 		$self->{res}{headers}=$res->headers->to_hash;
 	}
-	if($self->{res}{code} == 500){
-		print STDERR "CODE: $self->{res}{code}\n";
-		print STDERR "BODY: $self->{res}{body}\n";
-		print STDERR "\nTry Again\n";
-		sleep 10;
-		$self->send_req;
-	}
-	return $self;
+	
+	return $self->{res};
 }
 
-sub get_method{
-	my $self=shift;
-	my $me=$self->{method}{lc($self->{req}{method})} || die "Unknown http method.\n";
-	return $me;
-}
 
 1;
 
