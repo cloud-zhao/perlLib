@@ -7,9 +7,15 @@ use ALI::OSS::Util;
 use ALI::OSS::Result;
 
 use base qw(Exporter);
-our @EXPORT=qw();
+our @EXPORT=qw( OSS_ACL_TYPE_P
+		OSS_ACL_TYPE_PR
+		OSS_ACL_TYPE_PW
+		);
 
 use constant {
+	#Http body type
+	HBT_F		=>	"file",
+	HBT_O		=>	"object",
 	#CLINET http field
 	H_HEAD		=>	"headers",
 	H_BODY		=>	"body",
@@ -45,9 +51,9 @@ use constant {
 	#ALI oss headers
 	OSS_ACL		=>	"x-oss-acl",
 	OSS_O_ACL	=>	"x-oss-object-acl",
-	OSS_O_GROUP	=>	"x-oss-file-group",
-	OSS_O_C_SOURCE	=>	"x-oss-copy-source",
-	OSS_O_C_S_RANGE	=>	"x-oss-copy-source-range",
+	OSS_F_GROUP	=>	"x-oss-file-group",
+	OSS_C_SOURCE	=>	"x-oss-copy-source",
+	OSS_C_S_RANGE	=>	"x-oss-copy-source-range",
 	#ALI OSS acl
 	OSS_ACL_TYPE_P	=>	"private",
 	OSS_ACL_TYPE_PR	=>	"public-read",
@@ -85,6 +91,79 @@ sub get_buckets{
 	my $res=$self->_send_req($req);
 	$res->get_buckets->{to_string}();
 }
+
+sub put_buckets{
+	my $self=shift;
+	my $bucket=$check_para->(shift);
+	my $object=$check_para->(shift);
+	my $opts= @_ ? ref $_[0] eq 'HASH' ? $_[0] : die "Parameter format not HASH.\n" : {};
+	my $header={
+		DATE()		=>	gtime(),
+		CO_TYPE()	=>	"",
+		AUTH()		=>	""};
+
+	my $req={H_MTH()	=>	PUT,
+		 H_RES()	=>	get_resource($bucket,"?".$object),
+	 	 H_HEAD()	=>	$header,
+	 	 H_URL()	=>	$self->{URL}};
+	
+	
+	my $xml_head='<?xml version="1.0" encoding="UTF-8"?>';
+	my $pub_head={CO_TYPE()=>get_mimetype("a.xml"),CO_LENGTH()=>""};
+	my $get_info={	acl		=>	sub{return {H_HEAD()=>{OSS_ACL()=>$opts->{acl},
+							        CO_TYPE()=>get_mimetype}
+						}},
+		  	website		=>	sub{return {H_HEAD()=>$pub_head,
+						     H_BODY()=>$xml_head."<WebsiteConfiguration>
+						     <IndexDocument><Suffix>$opts->{Suffix}</Suffix></IndexDocument>
+						     <ErrorDocument><Key>$opts->{Key}</Key></ErrorDocument>
+						     </WebsiteConfiguration>"
+						}},
+		  	logging		=>	sub{return {H_HEAD()=>$pub_head,
+						     H_BODY()=>$xml_head."<BucketLoggingStatus><LoggingEnabled>
+						     <TargetBucket>".$opts->{TargetBucket}."</TargetBucket>
+						     <TargetPrefix>".$opts->{TargetPrefix}."</TargetPrefix>
+						     </LoggingEnabled></BucketLoggingStatus>"
+						}},
+			referer		=>	sub{return {H_HEAD()=>$pub_head,
+						     H_BODY()=>$xml_head."<RefererConfiguration>
+						     <AllowEmptyReferer>true</AllowEmptyReferer>
+						     <RefererList>".
+						     join '',map{"<Referer>$_</Referer>"} @{$opts->{Referers}}
+						     ."</RefererList>
+						     </RefererConfiguration>"
+						}},
+			lifecycle	=>	sub{return {H_HEAD()=>$pub_head,
+						     H_BODY()=>$xml_head."<LifecycleConfiguration>".
+						     join '',map{"<Rule><ID>$_->{ID}</ID>
+						     <Prefix>$_->{Prefix}</Prefix>
+						     <Status>$_->{Status}</Status>
+						     <Expiration><Days>$_->{ExDays}</Days></Expiration>
+						     <AbortMultipartUpload><Days>$_->{AbDays}</Days></AbortMultipartUpload>
+						     </Rule>"} @{$opts->{Rules}}
+						     ."</LifecycleConfiguration>"
+						}}
+	};
+
+
+	my $info= exists $get_info->{$object} ? $get_info->{$object}() : die "Object error.!\n" ;
+
+	$header->{$_}=$info->{+H_HEAD}{$_} for keys %{$info->{+H_HEAD}};
+	if(exists $info->{+H_BODY}){
+		$header->{+CO_LENGTH}=length $info->{+H_BODY};
+		$req->{+H_BODY}=$info->{+H_BODY};
+		$req->{+H_BTYPE}=HBT_O;
+	}
+		
+	$self->_send_req($req)->res_tostring;
+
+}
+
+sub put_bucket_acl{shift->put_buckets(shift,"acl",{acl=>shift || OSS_ACL_TYPE_PR})};
+sub put_bucket_logging{shift->put_buckets(shift,"logging",{TargetBucket=>shift,TargetPrefix=>shift})};
+sub put_bucket_website{shift->put_buckets(shift,"website",{Suffix=>shift,Key=>shift})};
+sub put_bucket_referer{shift->put_buckets(shift,"referer",{Referers=>[@_]})};
+
 
 sub put_bucket{
 	my $self=shift;
@@ -152,7 +231,7 @@ sub upload_file{
 	 	 H_HEAD()	=>	$header,
 	 	 H_URL()	=>	$self->{URL},
 	 	 H_BODY()	=>	$file,
-	 	 H_BTYPE()	=>	"file"};
+	 	 H_BTYPE()	=>	HBT_F};
 
 	$self->_send_req($req)->res_tostring;
 }
@@ -180,7 +259,7 @@ sub put_object{
 	 	 H_HEAD()	=>	$header,
 	 	 H_URL()	=>	$self->{URL},
 	 	 H_BODY()	=>	$content,
-	 	 H_BTYPE()	=>	"object"};
+	 	 H_BTYPE()	=>	HBT_O};
 
 	$self->_send_req($req)->res_tostring;
 }
