@@ -214,15 +214,10 @@ my $create_pucket_sub=sub{
 	});
 };
 
-for(qw(acl location info logging website referer lifecycle)){
-	my $sub_name=$_ eq "info" ? "bucketInfo" : $_;
-	$create_pucket_sub->(GET,"get_bucket_".$_,$sub_name);
-}
-for(qw(bucket logging website lifecycle)){
-	my $obj_name=$_ eq "bucket" ? "" : $_;
-	my $sub_name=$_ eq "bucket" ? "" : "_".$_;
-	$create_pucket_sub->(DEL,"del_bucket".$sub_name,$obj_name);
-}
+$create_pucket_sub->(GET,"get_bucket_".$_,$_) for qw(acl location logging website referer lifecycle);
+$create_pucket_sub->(GET,"get_bucket_info","bucketInfo");
+$create_pucket_sub->(DEL,"del_bucket_".$_,$_) for qw(logging website lifecycle);
+$create_pucket_sub->(DEL,"del_bucket","");
 
 sub get_objects{
 	my $self=shift;
