@@ -10,7 +10,7 @@ sub new{
 	my $self={};
 	$self->{connect}{timeout}=shift || 30;
 	$self->{req}{timeout}=shift || 5184000;
-	@{$self->{method}}{qw(put del get head post opt patch)}=qw(PUT DELETE GET HEAD POST OPTIONS PATCH);
+	@{$self->{method}}{qw(put delete get head post options patch)}=qw(PUT DELETE GET HEAD POST OPTIONS PATCH);
 	return bless $self,$class;
 }
 

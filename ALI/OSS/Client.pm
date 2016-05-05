@@ -193,24 +193,35 @@ my $create_sub=sub{
 	*{"${class}::$_"}=$set_sub->("${class}::$_",$subs{$_}) for keys %subs;
 };
 
-for my $sub_name (qw(acl location info logging website referer lifecycle)){
-	$create_sub->(__PACKAGE__,"get_bucket_".$sub_name,sub{
+my $create_pucket_sub=sub{
+	my ($mth,$sub_name,$object_name)=@_;
+	$create_sub->(__PACKAGE__,$sub_name,sub{
 		my $self=shift;
 		my $bucket=$check_para->(shift);
-		my $object=$sub_name eq "info" ? "bucketInfo" : $sub_name;
+		my $object=$object_name ? "?".$object_name : "";
 		my $header={
 			DATE()		=>	gtime(),
 			CO_TYPE()	=>	get_mimetype,
 			AUTH()		=>	""};
 
-		my $req={H_MTH()	=>	GET,
-			 H_RES()	=>	get_resource($bucket,"?".$object),
+		my $req={H_MTH()	=>	$mth,
+			 H_RES()	=>	get_resource($bucket,$object),
 		 	 H_HEAD()	=>	$header,
 		 	 H_URL()	=>	$self->{URL}};
 
 		 #return $self->_send_req($req);
 		$self->_send_req($req)->res_tostring;
 	});
+};
+
+for(qw(acl location info logging website referer lifecycle)){
+	my $sub_name=$_ eq "info" ? "bucketInfo" : $_;
+	$create_pucket_sub->(GET,"get_bucket_".$_,$sub_name);
+}
+for(qw(bucket logging website lifecycle)){
+	my $obj_name=$_ eq "bucket" ? "" : $_;
+	my $sub_name=$_ eq "bucket" ? "" : "_".$_;
+	$create_pucket_sub->(DEL,"del_bucket".$sub_name,$obj_name);
 }
 
 sub get_objects{
