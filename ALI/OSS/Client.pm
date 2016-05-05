@@ -92,7 +92,7 @@ sub get_buckets{
 	$res->get_buckets->{to_string}();
 }
 
-sub put_buckets{
+sub _put_buckets{
 	my $self=shift;
 	my $bucket=$check_para->(shift);
 	my $object=$check_para->(shift);
@@ -159,30 +159,58 @@ sub put_buckets{
 
 }
 
-sub put_bucket_acl{shift->put_buckets(shift,"acl",{acl=>shift || OSS_ACL_TYPE_PR})};
-sub put_bucket_logging{shift->put_buckets(shift,"logging",{TargetBucket=>shift,TargetPrefix=>shift})};
-sub put_bucket_website{shift->put_buckets(shift,"website",{Suffix=>shift,Key=>shift})};
-sub put_bucket_referer{shift->put_buckets(shift,"referer",{Referers=>[@_]})};
+sub put_bucket{shift->_put_buckets(shift,"acl",{acl=>shift || OSS_ACL_TYPE_PR})};
+sub put_bucket_acl{shift->_put_buckets(shift,"acl",{acl=>shift || OSS_ACL_TYPE_PR})};
+sub put_bucket_logging{shift->_put_buckets(shift,"logging",{TargetBucket=>shift,TargetPrefix=>shift})};
+sub put_bucket_website{shift->_put_buckets(shift,"website",{Suffix=>shift,Key=>shift})};
+sub put_bucket_referer{shift->_put_buckets(shift,"referer",{Referers=>[@_]})};
 
-
-sub put_bucket{
+sub put_bucket_lifecycle{
 	my $self=shift;
-	my $bucket=$check_para->(shift);
-	my $acl=shift || OSS_ACL_TYPE_PR;
-	my $object="?acl";
-	my $header={
-		DATE()		=>	gtime(),
-		CO_TYPE()	=>	get_mimetype,
-		AUTH()		=>	"",
-		OSS_ACL()	=>	$acl};
+	my $bucket=shift;
+	my $object="lifecycle";
+	my $opts={Rules=>[]};
+	my @list=@_ ? @_%5==0 ? @_ : die "Parameter error.\n" : exit;
 
-	my $req={H_MTH()	=>	PUT,
-		 H_RES()	=>	get_resource($bucket,$object),
-	 	 H_HEAD()	=>	$header,
-	 	 H_URL()	=>	$self->{URL}};
-	
+	for(my $i=0;$i<@list;$i++){
+		my %rules;
+		$rules{ID}=$list[$i++];
+		$rules{Prefix}=$list[$i++];
+		$rules{Status}=$list[$i++];
+		$rules{ExDays}=$list[$i++];
+		$rules{AbDays}=$list[$i];
+		push @{$opts->{Rules}},\%rules;
+	}
 
-	$self->_send_req($req)->res_tostring;
+	$self->_put_buckets($bucket,$object,$opts);
+}
+
+my $create_sub=sub{
+	my ($class,%subs)=@_;
+	my $set_sub=eval{require Sub::Util;Sub::Util->can('set_subname')} || die;
+	no strict 'refs';
+	no warnings 'redefine';
+	*{"${class}::$_"}=$set_sub->("${class}::$_",$subs{$_}) for keys %subs;
+};
+
+for my $sub_name (qw(acl location info logging website referer lifecycle)){
+	$create_sub->(__PACKAGE__,"get_bucket_".$sub_name,sub{
+		my $self=shift;
+		my $bucket=$check_para->(shift);
+		my $object=$sub_name eq "info" ? "bucketInfo" : $sub_name;
+		my $header={
+			DATE()		=>	gtime(),
+			CO_TYPE()	=>	get_mimetype,
+			AUTH()		=>	""};
+
+		my $req={H_MTH()	=>	GET,
+			 H_RES()	=>	get_resource($bucket,"?".$object),
+		 	 H_HEAD()	=>	$header,
+		 	 H_URL()	=>	$self->{URL}};
+
+		 #return $self->_send_req($req);
+		$self->_send_req($req)->res_tostring;
+	});
 }
 
 sub get_objects{
