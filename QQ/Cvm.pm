@@ -1,9 +1,8 @@
-package ALI::Ecs;
+package QQ::Cvm;
 $VERSION="0.0.1";
 
 use strict;
 use warnings;
-use UUID ':all';
 use Digest::HMAC_SHA1;
 use URI::Escape;
 use Mojo::UserAgent;
@@ -15,13 +14,13 @@ our @EXPORT=qw();
 
 sub new{
 	my $class=shift;
-	my ($id,$key,$url,$format)=@_;
+	my ($id,$key,$url,$region)=@_;
 	my $self={};
-	$self->{url}	=$url 	 || "ecs.aliyuncs.com";
+	$self->{url}	=$url 	 || "cvm.api.qcloud.com/v2/index.php";
 	$self->{id}	=$id 	 || die "ID Can not be empty!!!\n";
 	$self->{key}	=$key	 || die "key Can not be empty!!!\n";
-	$self->{format}	=$format || "JSON";
 	$self->{JSON}   =JSON->new();
+	$self->{region} = $region || "sh";
 
 	return bless $self,$class;
 }
@@ -43,31 +42,27 @@ my $strkey=sub {
 };
 
 my $signature=sub {
-	my ($pub_para,$key)=@_;
-	my $req_str=join '&',map{$_."=".$pub_para->{$_}} sort{$a cmp $b} keys %$pub_para;
-	$req_str="GET&".uri_escape_utf8("/")."&".uri_escape_utf8($req_str);
-	return uri_escape_utf8($strkey->("$key&",$req_str));
+	my ($url,$pub_para,$key)=@_;
+	my $req_str=join '&',map{my $pk=$_;s/_/./g;$_."=".$pub_para->{$pk}} sort{$a cmp $b} keys %$pub_para;
+	return $strkey->($key,"GET$url?$req_str");
 };
 
 sub entrance{
 	my $self=shift;
 	my $ac_para=shift;
-	die "Parameter error.\tparameter type HASH\n" unless ref $ac_para eq 'HASH'
+	die "Parameter error.\ntype HASH\n" unless ref $ac_para eq 'HASH';
 	my $ua=Mojo::UserAgent->new();
-	my $public_para={Format			=>	$self->{format},
-			 Version		=>	"2014-05-26",
-		 	 SignatureMethod	=>	"HMAC-SHA1",
-			 SignatureVersion	=>	"1.0",
-			 SignatureNonce		=>	uuid(),
-			 Timestamp		=>	&$localdate,
-			 AccessKeyId		=>	$self->{id},
+	my $public_para={Action		=>	undef,
+			 Region		=>	$self->{region},
+		 	 Nonce		=>	srand,
+			 Timestamp	=>	time,
+			 SecretId	=>	$self->{id},
 	 };
 
 	$public_para->{$_}=$ac_para->{$_} for keys %$ac_para;
-	%$public_para=map{uri_escape_utf8($_)=>uri_escape_utf8($public_para->{$_})} keys %$public_para;
-	$public_para->{Signature}=$signature->($public_para,$self->{key});
-	my $req_str=join '&',map{$_."=".$public_para->{$_}} keys %$public_para;
-	$req_str="https://$self->{url}/?$req_str";
+	$public_para->{Signature}=$signature->($self->{url},$public_para,$self->{key});
+	my $req_str=join '&',map{$_."=".uri_escape_utf8($public_para->{$_})} keys %$public_para;
+	$req_str="https://$self->{url}?$req_str";
 
 	my $tx=$ua->get($req_str);
 	my $res;
@@ -78,6 +73,7 @@ sub entrance{
 	return $res->body;
 }
 
+=pod
 sub get_allinstance{
 	my $self=shift;
 	my $region=shift || die "Region can not be empty.\n";
@@ -90,7 +86,7 @@ sub get_allinstance{
 	my $maxnum=1;
 	my $instances=[];
 	
-	my $totalcount=$self->{JSON}->decode($self->entrance($para))->{TotalCount};
+	my $totalcount=$self->{JSON}->decode($self->entrance(%$para))->{TotalCount};
 
 	return $instances unless $totalcount;
 
@@ -104,7 +100,7 @@ sub get_allinstance{
 	$para->{PageSize}=$maxsize;
 	for(1..$maxnum){
 		$para->{PageNumber}=$_;
-		my $ins=$self->{JSON}->decode($self->entrance($para))->{Instances}{Instance};
+		my $ins=$self->{JSON}->decode($self->entrance(%$para))->{Instances}{Instance};
 		push @$instances,@$ins;
 	}
 
@@ -122,12 +118,12 @@ sub instanced{
 		  InstanceId	=>$insid || die "Parameter error.\n"};
 	my $cb=sub {
 		$para->{ForceStop}="true";
-		$self->entrance($para);
+		$self->entrance(%$para);
 	};
 	my $fun={stop	=>$cb,
-		 start	=>sub{$self->entrance($para)},
+		 start	=>sub{$self->entrance(%$para)},
 		 reboot	=>$cb,
-	 	 del	=>sub{$self->entrance($para)}};
+	 	 del	=>sub{$self->entrance(%$para)}};
 
 	return &$fun->{$action};
 }
@@ -138,8 +134,9 @@ sub modify_instance{
 	die "Parameter error.\n" if @_%2 == 0;
 	$para{Action}="ModifyInstanceAttribute";
 	$para{InstanceId}=$insid || die "InstanceId can not be empty.\n";
-	$self->entrance(\%para);
+	$self->entrance(%para);
 }
+=cut
 
 1;
 
