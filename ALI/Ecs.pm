@@ -81,9 +81,10 @@ sub entrance{
 sub get_allinstance{
 	my $self=shift;
 	my $region=shift || die "Region can not be empty.\n";
+	my $status=shift || "Running";
 	my $para={Action	=>"DescribeInstances",
 		  RegionId	=>$region,
-		  Status	=>"Running",
+		  Status	=>$status,
 		  PageSize	=>1,
 		  PageNumber	=>1};
 	my $maxsize=100;
