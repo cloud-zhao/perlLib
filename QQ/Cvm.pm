@@ -3,77 +3,13 @@ $VERSION="0.0.1";
 
 use strict;
 use warnings;
-use Digest::HMAC_SHA1;
-use URI::Escape;
-use Mojo::UserAgent;
-use JSON;
+use base qw(QQ::Enter);
+use constant URL => "cvm.api.qcloud.com/v2/index.php";
 
-use base qw(Exporter);
-our @EXPORT=qw();
+my $url_check=sub{$_[0] eq URL ? $_[0] : URL};
+my $para_check=sub{$_[0] ? $_[0] : die "Parameter error.\n"};
 
 
-sub new{
-	my $class=shift;
-	my ($id,$key,$url,$region)=@_;
-	my $self={};
-	$self->{url}	=$url 	 || "cvm.api.qcloud.com/v2/index.php";
-	$self->{id}	=$id 	 || die "ID Can not be empty!!!\n";
-	$self->{key}	=$key	 || die "key Can not be empty!!!\n";
-	$self->{JSON}   =JSON->new();
-	$self->{region} = $region || "sh";
-
-	return bless $self,$class;
-}
-
-my $localdate=sub{
-	my %time;
-	$time{$_}=length($_)==1 ? "0$_" : $_ for 0..59;
-	my ($sec,$min,$hour,$day,$mon,$year,$wday,$yday,$isdst)=localtime(time()-8*3600);
-	$year+=1900;
-	$mon+=1;
-	return "$year-$time{$mon}-$time{$day}T$time{$hour}:$time{$min}:$time{$sec}Z";
-};
-
-my $strkey=sub {
-	my ($key,$data)=@_;
-	my $hmac=Digest::HMAC_SHA1->new($key);
-	$hmac->add($data);
-	return $hmac->b64digest."=";
-};
-
-my $signature=sub {
-	my ($url,$pub_para,$key)=@_;
-	my $req_str=join '&',map{my $pk=$_;s/_/./g;$_."=".$pub_para->{$pk}} sort{$a cmp $b} keys %$pub_para;
-	return $strkey->($key,"GET$url?$req_str");
-};
-
-sub entrance{
-	my $self=shift;
-	my $ac_para=shift;
-	die "Parameter error.\ntype HASH\n" unless ref $ac_para eq 'HASH';
-	my $ua=Mojo::UserAgent->new();
-	my $public_para={Action		=>	undef,
-			 Region		=>	$self->{region},
-		 	 Nonce		=>	srand,
-			 Timestamp	=>	time,
-			 SecretId	=>	$self->{id},
-	 };
-
-	$public_para->{$_}=$ac_para->{$_} for keys %$ac_para;
-	$public_para->{Signature}=$signature->($self->{url},$public_para,$self->{key});
-	my $req_str=join '&',map{$_."=".uri_escape_utf8($public_para->{$_})} keys %$public_para;
-	$req_str="https://$self->{url}?$req_str";
-
-	my $tx=$ua->get($req_str);
-	my $res;
-	unless($res=$tx->success){
-		print $tx->res->body,"\n";
-		exit;
-	}
-	return $res->body;
-}
-
-=pod
 sub get_allinstance{
 	my $self=shift;
 	my $region=shift || die "Region can not be empty.\n";
@@ -109,34 +45,51 @@ sub get_allinstance{
 
 sub instanced{
 	my $self=shift;
-	my ($insid,$action)=@_;
-	my $ac={stop	=>"StopInstance",
-		start	=>"StartInstance",
-		reboot	=>"RebootInstance",
-		del	=>"DeleteInstance"};
-	my $para={Action	=>$ac->{$action} || die "Parameter error.\n",
-		  InstanceId	=>$insid || die "Parameter error.\n"};
-	my $cb=sub {
-		$para->{ForceStop}="true";
-		$self->entrance(%$para);
-	};
-	my $fun={stop	=>$cb,
-		 start	=>sub{$self->entrance(%$para)},
-		 reboot	=>$cb,
-	 	 del	=>sub{$self->entrance(%$para)}};
+	my ($action,@insids)=@_;
+	my $ac={stop	=>"StopInstances",
+		start	=>"StartInstances",
+		reboot	=>"RebootInstances",
+		del	=>"ReturnInstance"};
+	my $para={Action	=>$para_check->($ac->{$action})};
 
-	return &$fun->{$action};
+	my $cb1=sub {
+		$para->{ForceStop}="true";
+		$self->entrance($para);
+	};
+	my $cb2=sub{$self->entrance($para)};
+
+	if(@insids && ($action ne 'del')){
+		for(my $i;$i<@insids;$i++){
+			$para->{"instanceIds.".$i}=$insids[$i];
+		}
+	}elsif(@insids){
+		$cb2=sub{
+			for(@insids){
+				$para->{instanceId}=$_;
+				$self->entrance($para);
+			}
+		};
+	}
+
+	my $fun={stop	=>$cb1,
+		 start	=>$cb2,
+		 reboot	=>$cb2,
+	 	 del	=>$cb2};
+
+	return &{$fun->{$action}};
 }
 
 sub modify_instance{
 	my $self=shift;
-	my ($insid,%para)=@_;
-	die "Parameter error.\n" if @_%2 == 0;
-	$para{Action}="ModifyInstanceAttribute";
-	$para{InstanceId}=$insid || die "InstanceId can not be empty.\n";
-	$self->entrance(%para);
+	my $insid=$para_check->(shift);
+	my $name=$para_check->(shift);
+	
+	my $para={Action	=>	"ModifyInstanceAttributes",
+		  instanceId	=>	$insid,
+	  	  instanceName	=>	$name};
+	$self->entrance($para);
 }
-=cut
+
 
 1;
 
