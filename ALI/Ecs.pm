@@ -72,8 +72,12 @@ sub entrance{
 	my $tx=$ua->get($req_str);
 	my $res;
 	unless($res=$tx->success){
-		print $tx->res->body,"\n";
-		exit;
+		my $err=$tx->error;
+		return $err->{code} ? $tx->res->body :
+		'{"RequestId":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+		  "HostId": "ecs.aliyuncs.com",
+		  "Code": "FFFF",
+		  "Message": "'.$err->{message}'"}';
 	}
 	return $res->body;
 }
@@ -130,7 +134,7 @@ sub instanced{
 		 reboot	=>$cb,
 	 	 del	=>sub{$self->entrance($para)}};
 
-	return &$fun->{$action};
+	return &{$fun->{$action}};
 }
 
 sub modify_instance{
