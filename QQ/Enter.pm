@@ -14,13 +14,16 @@ our @EXPORT=qw();
 
 sub new{
 	my $class=shift;
-	my ($id,$key,$url,$region)=@_;
+	my ($id,$key,%para)=@_;
+	my $pub_para={url=>"",region=>"sh"};
 	my $self={};
-	$self->{url}	=$url ?	"$url/v2/index.php" : "cvm.api.qcloud.com/v2/index.php";
+
+	$pub_para->{$_}=exists $pub_para->{$_} ? $para{$_} : &_para_check for keys %para;
 	$self->{id}	=$id 	 || die "ID Can not be empty!!!\n";
 	$self->{key}	=$key	 || die "key Can not be empty!!!\n";
 	$self->{JSON}   =JSON->new();
-	$self->{region} = $region || "sh";
+	$self->{region} =$pub_para->{region};
+	$self->{url}	=$pub_para->{url}=~m#(?:^http://)?([^/]+(?:/[^/]+)*)(?!/)$# ? $1 : "";
 
 	return bless $self,$class;
 }
@@ -59,18 +62,40 @@ sub entrance{
 			 SecretId	=>	$self->{id},
 	 };
 
+	$self->_set_url unless $self->{url};
 	$public_para->{$_}=$ac_para->{$_} for keys %$ac_para;
 	$public_para->{Signature}=$signature->($self->{url},$public_para,$self->{key});
 	my $req_str=join '&',map{$_."=".uri_escape_utf8($public_para->{$_})} keys %$public_para;
-	$req_str="https://$self->{url}?$req_str";
+	my $abs_url="https://$self->{url}";
+	my $request="$abs_url?$req_str";
 
-	my $tx=$ua->get($req_str);
+	my $tx=length($request)<2000 ? $ua->get($request) : $ua->post($abs_url,$req_str);
 	my $res;
 	unless($res=$tx->success){
-		print $tx->res->body,"\n";
-		exit;
+		my $err=$tx->error;
+		return $err->{code} ? $tx->res->body : '{"code":9999,"message:"'.$err->{message}.'}';
 	}
 	return $res->body;
+}
+
+sub _para_check{$_[0] ? $_[0] : die "Parameter error.\n"}
+sub _res_check{
+	my $self=shift;
+	my $res=_para_check(shift);
+	my $info=$self->{JSON}->decode($res);
+
+	return $info->{code}==0 ? $info : 0;
+}
+
+sub _set_url{
+	my $self=shift;
+	my $URL={Cvm => "cvm.api.qcloud.com/v2/index.php",
+		 Cdn => "cdn.api.qcloud.com/v2/index.php",
+	 	 Lb  => "lb.api.qcloud.com/v2/index.php",
+		 Dfw => "dfw.api.qcloud.com/v2/index.php"};
+	for(keys %$URL){
+		$self->{url}=$URL->{$_} if $self->isa("QQ::".$_);
+	}
 }
 
 1;

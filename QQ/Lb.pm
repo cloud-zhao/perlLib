@@ -6,16 +6,17 @@ use warnings;
 use base qw(QQ::Enter);
 use constant URL => "lb.api.qcloud.com/v2/index.php";
 
-my $url_check=sub{$_[0] eq URL ? $_[0] : URL};
-my $para_check=sub{$_[0] ? $_[0] : die "Parameter error.\n"};
+my $url_check=sub{$_[0] || URL};
 
-sub add_lb_host{
+sub add_lb_hosts{
 	my $self=shift;
-	my $lbid=$para_check->(shift);
-	my $insids=$para_check->(shift);
+	my $lbid=_para_check(shift);
+	my $insids=shift;
 
 	my $para={Action => "RegisterInstancesWithLoadBalancer"};
 	my $w_check=sub{$_[0]>0 && $_[0]<100 ? $_[0] : 10 };
+
+	$self->{url}=$url_check->($self->{url});
 	if(ref $insids eq 'ARRAY'){
 		for(my $i=0;$i<@$insids;$i++){
 			$para->{"backends.$i.instanceId"}=$insids->[$i];
@@ -32,6 +33,34 @@ sub add_lb_host{
 	}
 
 	$self->entrance($para);
+}
+
+sub get_lb_hosts{
+	my $self=shift;
+	my $lbid=_para_check(shift);
+
+	my $para={Action 	=> "DescribeLoadBalancerBackends",
+		  loadBalancerId=> $lbid,
+		  offset	=> 0,
+	  	  limit		=> 100};
+
+	$self->{url}=$url_check->($self->{url});
+	my $res=$self->entrance($para);
+	my $info=$self->_res_check($res) || return $res;
+	my $hosts={};
+	$hosts->{$_->{lanIp}}=$_ for @{$info->{backendSet}};
+
+	return {get_host	=>sub{$hosts->{+shift}},
+		to_string	=>sub{
+					for(keys %$hosts){
+						print "$hosts->{$_}{unInstanceId}\t";
+						print "$hosts->{$_}{instanceName}\t";
+						print "$hosts->{$_}{lanIp}\t";
+						print "$hosts->{$_}{weight}\t";
+						print "$hosts->{$_}{wanIpSet}[0]\n";
+					}
+				}
+	       };
 }
 
 1;
