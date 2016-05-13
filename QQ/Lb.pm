@@ -151,6 +151,26 @@ sub get_lb_hosts{
        return $res;
 }
 
+sub del_lb_hosts{
+	my $self=shift;
+	my $lbid=$self->_para_check(shift);
+	my (@insids)=@_;
+
+	my $para={Action		=> "DeregisterInstancesFromLoadBalancer",
+		  loadBalancerId	=> $lbid};
+
+	$self->{url}=$url_check->($self->{url});
+	if(@insids){
+		for(my $i=0;$i<@insids;$i++){
+			$para->{"backends.$i.instanceId"}=$insids[$i];
+		}
+	}else{
+		return;
+	}
+
+	$self->entrance($para);
+}
+
 
 1;
 
