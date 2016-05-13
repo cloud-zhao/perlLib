@@ -18,7 +18,7 @@ sub new{
 	my $pub_para={url=>"",region=>"sh"};
 	my $self={};
 
-	$pub_para->{$_}=exists $pub_para->{$_} ? $para{$_} : &_para_check for keys %para;
+	$pub_para->{$_}=exists $pub_para->{$_} ? $para{$_} : _para_check(1) for keys %para;
 	$self->{id}	=$id 	 || die "ID Can not be empty!!!\n";
 	$self->{key}	=$key	 || die "key Can not be empty!!!\n";
 	$self->{JSON}   =JSON->new();
@@ -47,7 +47,8 @@ my $strkey=sub {
 my $signature=sub {
 	my ($url,$pub_para,$key)=@_;
 	my $req_str=join '&',map{my $pk=$_;s/_/./g;$_."=".$pub_para->{$pk}} sort{$a cmp $b} keys %$pub_para;
-	return $strkey->($key,"GET$url?$req_str");
+	my $mth=length("https://$url?$req_str") < 2000 ? 'GET' : 'POST';
+	return $strkey->($key,"$mth$url?$req_str");
 };
 
 sub entrance{
@@ -68,20 +69,25 @@ sub entrance{
 	my $req_str=join '&',map{$_."=".uri_escape_utf8($public_para->{$_})} keys %$public_para;
 	my $abs_url="https://$self->{url}";
 	my $request="$abs_url?$req_str";
+	my $header={"Content-Type"=>"application/x-www-form-urlencoded"};
 
-	my $tx=length($request)<2000 ? $ua->get($request) : $ua->post($abs_url,$req_str);
+	my $tx=length($request) < 2000 ? 
+	$ua->build_tx('GET'=>$request) :
+	$ua->build_tx('POST'=>$abs_url=>$header=>$req_str);
+	
+	$tx=$ua->start($tx);
 	my $res;
 	unless($res=$tx->success){
 		my $err=$tx->error;
-		return $err->{code} ? $tx->res->body : '{"code":9999,"message:"'.$err->{message}.'}';
+		return $err->{code} ? $tx->res->body : '{"code":9999,"message:"'.$err->{message}.'"}';
 	}
 	return $res->body;
 }
 
-sub _para_check{$_[0] ? $_[0] : die "Parameter error.\n"}
+sub _para_check{$_[1] ? $_[1] : die "Parameter error.\n"}
 sub _res_check{
 	my $self=shift;
-	my $res=_para_check(shift);
+	my $res=$self->_para_check(shift);
 	my $info=$self->{JSON}->decode($res);
 
 	return $info->{code}==0 ? $info : 0;

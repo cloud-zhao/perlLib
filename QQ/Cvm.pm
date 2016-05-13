@@ -83,7 +83,7 @@ sub instanced{
 		start	=>"StartInstances",
 		reboot	=>"RebootInstances",
 		del	=>"ReturnInstance"};
-	my $para={Action	=>_para_check($ac->{$action})};
+	my $para={Action	=>$self->_para_check($ac->{$action})};
 
 	my $cb1=sub {
 		$para->{ForceStop}="true";
@@ -115,8 +115,8 @@ sub instanced{
 
 sub modify_instance{
 	my $self=shift;
-	my $insid=_para_check(shift);
-	my $name=_para_check(shift);
+	my $insid=$self->_para_check(shift);
+	my $name=$self->_para_check(shift);
 	
 	my $para={Action	=>	"ModifyInstanceAttributes",
 		  instanceId	=>	$insid,
