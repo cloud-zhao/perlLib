@@ -57,10 +57,83 @@ sub get_sg_policy{
 			}
 		};
 
+	my $policy_list=sub{
+			my (@policy_)=@_;
+			my $array={};
+			for(my $i=0;$i<@policy_;$i++){
+				my $i_list=[];
+				push @$i_list,$policy_[$i]->{ipProtocol} || 0;
+				push @$i_list,$policy_[$i]->{portRange} || 0;
+				push @$i_list,$policy_[$i]->{cidrIp} || 0;
+				push @$i_list,$policy_[$i]->{action} eq "ACCEPT" ? 1 : 0;
+				$array->{$i}=$i_list;
+			}
+
+			return $array;
+		};
+
 	return {to_string =>sub{$policy_print->("ingress",@$policy_in);
-				$policy_print->("egress",@$policy_out)}};
+				$policy_print->("egress",@$policy_out);
+			    },
+		get_list  =>sub{
+				my $all={};
+				$all->{ingress}=$policy_list->(@$policy_in);
+				$all->{egress}=$policy_list->(@$policy_out);
+				return $all;
+			    },
+	       };
 }
 
+sub modify_sg_policy{
+	my $self=shift;
+	my $sgid=$self->_para_check(shift);
+	my (%policys)=@_;
+	my @dire=qw(ingress egress);
+	my @action=qw(DROP ACCEPT);
+
+	return 0 unless exists $policys{$dire[0]} || exists $policys{$dire[1]};
+
+	my @params=qw(ipProtocol
+		      portRange
+		      cidrIp
+		      action
+		      desc);
+	my $para={Action	=> "ModifySecurityGroupPolicy",
+		  sgId		=> $sgid};
+
+	#%policys=(ingress=>{0=>[0,0,0,1]});
+
+	$self->{url}=$url_check->($self->{url});
+
+	for my $gress (keys %policys){
+		for my $num (keys %{$policys{$gress}}){
+			my $policy=$policys{$gress}->{$num};
+			$para->{"$gress.$num.$params[0]"}=$policy->[0] if $policy->[0];
+			$para->{"$gress.$num.$params[1]"}=$policy->[1] if $policy->[1];
+			$para->{"$gress.$num.$params[2]"}=$policy->[2] if $policy->[2];
+			$para->{"$gress.$num.$params[3]"}=$policy->[3] ? $action[1] : $action[0];
+			$para->{"$gress.$num.$params[4]"}=$policy->[4] if @$policy == 5;
+		}
+	}
+
+	$self->entrance($para);
+}
+
+sub add_sg_policy{
+	my $self=shift;
+	my $sgid=$self->_para_check(shift);
+	my (@policy)=@_;
+	
+	return 0 unless @policy;
+
+	my $res=$self->get_sg_policy($sgid);
+	my $policys=ref $res eq "HASH" ? $res->{get_list}() : return $res;
+
+	my $num=keys %{$policys->{ingress}};
+	$policys->{ingress}{$num}=\@policy;
+
+	$self->modify_sg_policy($sgid,ingress=>$policys->{ingress},egress=>$policys->{egress});
+}
 
 1;
 
