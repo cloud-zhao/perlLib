@@ -26,10 +26,19 @@ print_res($res,"to_string");
 
 my $sg=QQ::Dfw->new($id,$key);
 #$res=$sg->get_sgs;
-$res=$sg->get_sg_policy("sg-9117yfdy");
-print_res($res,"to_string");
+#$res=$sg->get_sg_policy("sg-9117yfdy");
+#print_res($res,"to_string");
 
 
+#parameter:
+#     sgid,
+#     ingress=>{policy_number=>[protocol,port,source_ip,aciton,desc]},
+#     egress=>{policy_number=>[protocol,port,target_ip,action,desc]}
+#parameter "desc" optional
+#print $sg->modify_sg_policy("sg-88lxjane",ingress=>{4=>[qw(tcp 22),0,1]});
+##print "\n";
+#parameter:sgid,ip_protocol,port,source_ip,action,desc;
+#print $sg->add_sg_policy("sg-88lxjane","tcp",9999,0,1),"\n";
 
 
 
