@@ -7,18 +7,18 @@ my ($buff,$res,$start,$log_head,$ms_head)=("","",0,12,6);
 
 while(1){
 	$res=myread(\$file,\$buff,12,$start);
-	last if $res == -1;
+	last if $res < 12;
 	my ($offset,$size)=get_head($buff);
 	$start += $log_head + $ms_head;
 
 	$res=myread(\$file,\$buff,4,$start);
-	last if $res == -1;
+	last if $res < 4;
 	my $key=get_int($buff);
 	my $ms_key_len=4 + ($key > 0 ? $key : 0);
 	$start += $ms_key_len;
 	
 	$res=myread(\$file,\$buff,4,$start);
-	last if $res == -1;
+	last if $res < 4;
 	my $ms_size=get_int($buff);
 	$start += 4;
 	my $ms_len=$size - $ms_key_len - $ms_head - 4;
@@ -47,6 +47,6 @@ sub get_int{
 }
 
 sub get_head{
-	my $buff=shift || ();
+	my $buff=shift || return ();
 	return unpack("q>i>",$buff);
 }
