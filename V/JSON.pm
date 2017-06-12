@@ -50,7 +50,9 @@ sub get_boolean{
 	$_[1]--;
 	die "type error" if $r ne 'true' && $r ne 'false';
 
-	return $r eq 'true'?1:0;
+	my $c=sub{bless \(my $c=shift),'V::JSON::Boolean'};
+
+	return $r eq 'true'?$c->(1):$c->(0);
 }
 sub get_null{
 	$_[1]--;
