@@ -151,14 +151,14 @@ my $builder_object=sub{
 		my $r=ref $d||'SCALAR';
 		if($r eq 'SCALAR'){
 			return $builder_scalar->($d);
-		}elsif($r eq 'V::JSON::BOOLEAN'){
+		}elsif($r eq 'V::JSON::Boolean'){
 			return $builder_boolean->($$d);
 		}elsif($r eq 'ARRAY'){
 			return $builder_array->($d);
 		}elsif($r eq 'HASH'){
 			return $builder_hash->($d);
 		}else{
-			die "type error";
+			die "type error $r";
 		}
 	}else{
 		return $builder_undef->();
@@ -168,7 +168,7 @@ $builder_hash=sub{
 	my $d=shift;
 	my $s=[];
 
-	push @$s,$_.":".$builder_object->($d->{$_}) for keys %$d;
+	push @$s,qq("$_").":".$builder_object->($d->{$_}) for keys %$d;
 	return '{'.join(',',@$s).'}';
 };
 $builder_array=sub{
