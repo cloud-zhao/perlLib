@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use base qw(Exporter);
 
-our @EXPORT_OK=qw(json_encode);
+our @EXPORT_OK=qw(json_encode json_decode);
 
 my $type={
 	'"'	=>	1,
