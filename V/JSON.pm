@@ -21,13 +21,14 @@ my $type={
 	':'	=>	7
 };
 my ($get_value,$get_array,$get_hash,$builder_hash,$builder_array);
-my $is_type=sub {$type->{+shift}||$type->{int}};
 my $get_byte=sub {substr($_[0],$_[1]++,1)};
 $get_value=sub{
 	my $t=$get_byte->($_[0],$_[1]);
 	my $i=$type->{$t};
 	if($i){
-		return '' if $_[2]==1 && $i==1;
+		my $e=$get_byte->($_[0],$_[1]-=2);
+		$_[1]++;
+		return '' if $_[2]==1 && $i==1 && $e ne '\\';
 		return '' if $_[2]==2 && ($i==2 || $i==-3 || $i==-4);
 		$t.=$get_value->(@_);
 	}else{
