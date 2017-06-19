@@ -22,6 +22,20 @@ my $type={
 };
 my ($get_value,$get_array,$get_hash,$builder_hash,$builder_array);
 my $get_byte=sub {substr($_[0],$_[1]++,1)};
+=pod
+$get_value=sub{
+	my $t=$get_byte->($_[0],$_[1]);
+	my $i=$type->{$t};
+	my $g='';
+	if($i){
+		my $e=$get_byte->($_[0],$_[1]-=2);
+		$_[1]++;
+		return '' if $_[2]==1 && $i==1 && $e ne '\\';
+		return '' if $_[2]==2 && ($i==2 || $i==-3 || $i==-4);
+	}
+	$g.=$t.$get_value->(@_);
+};
+=cut
 $get_value=sub{
 	my $t=$get_byte->($_[0],$_[1]);
 	my $i=$type->{$t};
@@ -41,7 +55,7 @@ my $get_number=sub{
 	$_[1]--;
 	my $r=$get_value->($_[0],$_[1],2);
 	$_[1]--;
-	die "type error" if $r!~/^\d+$/;
+	die "type error $r" if $r!~/\d/;
 	return $r;
 };
 my $get_boolean=sub{
@@ -75,10 +89,10 @@ my $get_object=sub{
 		$v=$get_null->(@_);
 	}elsif($type->{$t} && $type->{$t} == 6){
 		$v=$get_boolean->(@_);
-	}elsif($t =~ /\d/){
+	}elsif($t =~ /\d/ || $t eq '-'){
 		$v=$get_number->(@_);
 	}else{
-		die "value type error";
+		die "value type error $t $_[1]";
 	}
 
 	return $v;
@@ -88,6 +102,7 @@ $get_array=sub{
 	my $t=$get_byte->($_[0],$_[1]);
 	my ($r,$v)=([],undef);
 
+	return $r if $type->{$t} && $type->{$t} == -3;
 	$v=$get_object->($t,@_);
 	push @$r,$v;
 	$t=$get_byte->($_[0],$_[1]);
@@ -125,6 +140,8 @@ $get_hash=sub{
 		}else{
 			die "object type error";
 		}
+	}elsif($type->{$t} && $type->{$t} == -4){
+		return $r;
 	}else{
 		die "key type error";
 	}
