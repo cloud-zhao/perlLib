@@ -56,7 +56,7 @@ my $get_number=sub{
 	my $r=$get_value->($_[0],$_[1],2);
 	$_[1]--;
 	die "type error $r" if $r!~/\d/;
-	return $r;
+	return $r+0;
 };
 my $get_boolean=sub{
 	$_[1]--;
